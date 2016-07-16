@@ -1436,6 +1436,14 @@ void space::nextstep(){
 		nfset 	*self=(nfset*)s;
 		object 	*o;
 		o=*(info->data);
+		o->move.x+=o->moveAdd.x;
+		o->move.y+=o->moveAdd.y;
+		o->move.z+=o->moveAdd.z;
+		o->rotate.x+=o->rotateAdd.x;
+		o->rotate.y+=o->rotateAdd.y;
+		o->rotate.z+=o->rotateAdd.z;
+		o->rotateAdd.init();
+		o->moveAdd.init();
 		o->position.x+=(o->move.x)*(self->sp->timestep);
 		o->position.y+=(o->move.y)*(self->sp->timestep);
 		o->position.z+=(o->move.z)*(self->sp->timestep);
