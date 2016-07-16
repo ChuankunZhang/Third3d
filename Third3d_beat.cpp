@@ -1395,7 +1395,7 @@ void rotatePoint(
 	vec3<t3dfloat> 	buf(0.0f , 0.0f , 0.0f);
 	vec3<t3dfloat> 	r(point->x - center->x , point->y - center->y , point->z - center->z);
 
-	buf.x	=r.x*cos(Rotate-->z)-r.y*sin(Rotate->z);
+	buf.x	=r.x*cos(Rotate->z)-r.y*sin(Rotate->z);
 	buf.y	=r.x*sin(Rotate->z)+r.y*cos(Rotate->z);
 	r.x	=buf.x;
 	r.y	=buf.y;
@@ -1442,8 +1442,8 @@ void space::nextstep(){
 		o->rotate.x+=o->rotateAdd.x;
 		o->rotate.y+=o->rotateAdd.y;
 		o->rotate.z+=o->rotateAdd.z;
-		o->rotateAdd.init();
-		o->moveAdd.init();
+		o->rotateAdd.init(0.0f , 0.0f , 0.0f);
+		o->moveAdd.init(0.0f , 0.0f , 0.0f);
 		o->position.x+=(o->move.x)*(self->sp->timestep);
 		o->position.y+=(o->move.y)*(self->sp->timestep);
 		o->position.z+=(o->move.z)*(self->sp->timestep);
