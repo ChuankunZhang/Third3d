@@ -1596,16 +1596,16 @@ void rotatePoint(
 	vec3<t3dfloat> 	buf(0.0f , 0.0f , 0.0f);
 	vec3<t3dfloat> 	r(point->x - center->x , point->y - center->y , point->z - center->z);
 
-	buf.x	=r.x*cos(Rotate->z)-r.y*sin(Rotate->z);
-	buf.y	=r.x*sin(Rotate->z)+r.y*cos(Rotate->z);
+	buf.x	=r.x*cos(-(Rotate->z))-r.y*sin(-(Rotate->z));
+	buf.y	=r.x*sin(-(Rotate->z))+r.y*cos(-(Rotate->z));
 	r.x	=buf.x;
 	r.y	=buf.y;
-	buf.z	=r.z*cos(Rotate->y)-r.x*sin(Rotate->y);
-	buf.x	=r.z*sin(Rotate->y)+r.x*cos(Rotate->y);
+	buf.z	=r.z*cos(-(Rotate->y))-r.x*sin(-(Rotate->y));
+	buf.x	=r.z*sin(-(Rotate->y))+r.x*cos(-(Rotate->y));
 	r.z	=buf.z;
 	r.x	=buf.x;
-	buf.y	=r.y*cos(Rotate->x)-r.z*sin(Rotate->x);
-	buf.z	=r.y*sin(Rotate->x)+r.z*cos(Rotate->x);
+	buf.y	=r.y*cos(-(Rotate->x))-r.z*sin(-(Rotate->x));
+	buf.z	=r.y*sin(-(Rotate->x))+r.z*cos(-(Rotate->x));
 	point->x	=buf.x;
 	point->y	=buf.y;
 	point->z	=buf.z;
