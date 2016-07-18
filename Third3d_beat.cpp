@@ -1078,6 +1078,9 @@ namespace space{
 				time=0;
 				next=null;
 			}
+			~clogpool(){
+				if(next) delete next;
+			}
 			clog *	construct();
 	};
 	class space{
@@ -1093,9 +1096,13 @@ namespace space{
 				time=0;
 				timestep=1;
 				logpool=new clogpool;
+				logpool2=new clogpool;
 				logpool->par=this;
+				logpool2->par=this;
 			}
 			~space(){
+				delete logpool;
+				delete logpool2;
 			}
 			void add(object *o);
 			void remove(object *o);
@@ -1106,6 +1113,7 @@ namespace space{
 			octree 			oct;
 			octree			colBuffer;
 			clogpool	*	logpool;
+			clogpool	*	logpool2;
 			t3dfloat 		maxR;
 			tmp::table<object*> 	objects;
 			void collide(object *o);
@@ -1135,9 +1143,12 @@ namespace space{
 			//Cyliner	cyliner;
 			sphere(){
 				time=0;
+				collideLog=null;
+				collideLogLast=null;
 			}
 			int	time;
 			clog * 	collideLog;
+			clog * 	collideLogLast;
 	};
 	class Shape{
 		friend class collider;
@@ -1262,10 +1273,24 @@ clog *	clogpool::construct(){
 }
 bool space::collideLog(sphere * s,void * t){
 	clog *	c;
+	bool	res;
 	if(s->time!=time){
+		s->collideLogLast=s->collideLog;
 		s->collideLog=logpool->construct();
 		s->collideLog->text=t;
 		return false;
+	}
+	if(s->collideLogLast){
+		c=s->collideLogLast;
+		while(1){
+			if(c->text==s){
+				res=true;
+				break;
+			}
+			if(c==null)
+				break;
+			c=c->next;
+		}
 	}
 	c=s->collideLog;
 	while(1){
@@ -1274,6 +1299,7 @@ bool space::collideLog(sphere * s,void * t){
 		if(c->next==null){
 			c->next=logpool->construct();
 			c->next->text=t;
+			return res;
 		}
 		c=c->next;
 	}
@@ -1596,16 +1622,16 @@ void rotatePoint(
 	vec3<t3dfloat> 	buf(0.0f , 0.0f , 0.0f);
 	vec3<t3dfloat> 	r(point->x - center->x , point->y - center->y , point->z - center->z);
 
-	buf.x	=r.x*cos(-(Rotate->z))-r.y*sin(-(Rotate->z));
-	buf.y	=r.x*sin(-(Rotate->z))+r.y*cos(-(Rotate->z));
+	buf.x	=r.x*cos(Rotate->z)-r.y*sin(Rotate->z);
+	buf.y	=r.x*sin(Rotate->z)+r.y*cos(Rotate->z);
 	r.x	=buf.x;
 	r.y	=buf.y;
-	buf.z	=r.z*cos(-(Rotate->y))-r.x*sin(-(Rotate->y));
-	buf.x	=r.z*sin(-(Rotate->y))+r.x*cos(-(Rotate->y));
+	buf.z	=r.z*cos(Rotate->y)-r.x*sin(Rotate->y);
+	buf.x	=r.z*sin(Rotate->y)+r.x*cos(Rotate->y);
 	r.z	=buf.z;
 	r.x	=buf.x;
-	buf.y	=r.y*cos(-(Rotate->x))-r.z*sin(-(Rotate->x));
-	buf.z	=r.y*sin(-(Rotate->x))+r.z*cos(-(Rotate->x));
+	buf.y	=r.y*cos(Rotate->x)-r.z*sin(Rotate->x);
+	buf.z	=r.y*sin(Rotate->x)+r.z*cos(Rotate->x);
 	point->x	=buf.x;
 	point->y	=buf.y;
 	point->z	=buf.z;
@@ -1631,6 +1657,10 @@ struct nfset{
 };
 void space::nextstep(){
 	nfset 		n;
+	clogpool *	c;
+	c=logpool;
+	logpool=logpool2;
+	logpool2=c;
 	n.sp=this;
 	time++;
 	objects.foreach([](tmp::table<object*>::info *info,void *s){
