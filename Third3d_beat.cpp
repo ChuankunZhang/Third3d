@@ -5,6 +5,8 @@
 	#define null 0
 	#define pai 3.141592f
 #endif
+#ifndef _t3d
+	#define _t3d
 namespace Third3d{
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -1056,6 +1058,28 @@ namespace space{
 	class sphere;
 	class Shape;
 	class collider;
+	class space;
+	class clog{
+		public:
+			void *	text;
+			clog * 	next;
+	};
+	class clogpool{
+		friend class space;
+		public:
+		protected:
+			clog 		c[65536];
+			space *		par;
+			clogpool *	next;
+			int		p;
+			int		time;
+			clogpool(){
+				p=0;
+				time=0;
+				next=null;
+			}
+			clog *	construct();
+	};
 	class space{
 		friend class collider;
 		public:
@@ -1068,6 +1092,8 @@ namespace space{
 				onCollide=null;
 				time=0;
 				timestep=1;
+				logpool=new clogpool;
+				logpool->par=this;
 			}
 			~space(){
 			}
@@ -1075,9 +1101,11 @@ namespace space{
 			void remove(object *o);
 			void update(object *o);
 			void nextstep();
+			bool collideLog(sphere * s,void * t);
 		protected:
 			octree 			oct;
 			octree			colBuffer;
+			clogpool	*	logpool;
 			t3dfloat 		maxR;
 			tmp::table<object*> 	objects;
 			void collide(object *o);
@@ -1105,6 +1133,11 @@ namespace space{
 		public:
 			//bool 		cylinerMode;
 			//Cyliner	cyliner;
+			sphere(){
+				time=0;
+			}
+			int	time;
+			clog * 	collideLog;
 	};
 	class Shape{
 		friend class collider;
@@ -1160,6 +1193,7 @@ namespace space{
 			void setMove(t3dfloat x,t3dfloat y,t3dfloat z);
 			void setRotate(t3dfloat x,t3dfloat y,t3dfloat z);
 			void getVelocity(vec3<t3dfloat> *p,vec3<t3dfloat> *out);
+			void addimpulse(vec3<t3dfloat> *p,vec3<t3dfloat> *i);
 		protected:
 			int 		time;
 			vec3<t3dfloat>	moveAdd;
@@ -1199,7 +1233,7 @@ namespace space{
 			void step2	();
 			void step3	(object *obj);
 			void step4	(object *a,object *b);
-		static	void collided	(object *,object *,sphere *,sphere *);
+			void collided	(object *,object *,sphere *,sphere *);
 	};
 //////////////////////////////////////
 //////////////////////////////////////
@@ -1208,14 +1242,50 @@ namespace space{
 //////////////////////////////////////
 
 //////////////////////////////////////
-//////碰撞求解器 begin//////////////////
+//////collide  begin//////////////////
 //////////////////////////////////////
+clog *	clogpool::construct(){
+	if(time!=par->time){
+		p=0;
+	}
+	if(p>65536){
+		if(next==null){
+			next=new clogpool;
+			next->time=time;
+			next->par=par;
+		}
+		return	next->construct();
+	}
+	p++;
+	c[p-1].next=null;
+	return &c[p-1];
+}
+bool space::collideLog(sphere * s,void * t){
+	clog *	c;
+	if(s->time!=time){
+		s->collideLog=logpool->construct();
+		s->collideLog->text=t;
+		return false;
+	}
+	c=s->collideLog;
+	while(1){
+		if(c->text==t)
+			return true;
+		if(c->next==null){
+			c->next=logpool->construct();
+			c->next->text=t;
+		}
+		c=c->next;
+	}
+}
 void collider::collided(
 	object * a,
 	object * b,
 	sphere * oa,
 	sphere * ob
 ){
+	if(parent->collideLog(oa,ob))return;
+	if(parent->collideLog(ob,oa))return;
 	vec3<t3dfloat> 	buf1,buf2;
 	t3dfloat 	buf3,buf4,buf5,buf6;
 	//get true position of sphere
@@ -1284,47 +1354,177 @@ void collider::collided(
 	b->getVelocity(&point,&vb);
 	//end
 	//comput energy
-	vec3<t3dfloat> Pa();
-	vec3<t3dfloat> Pb();
+	vec3<t3dfloat> v(
+		a->move.x-b->move.x,
+		a->move.y-b->move.y,
+		a->move.z-b->move.z
+	);
+	vec3<t3dfloat> Pv(
+		v.x*a->m,
+		v.y*a->m,
+		v.z*a->m
+	);
+	t3dfloat ra=sqrt((point.x-a->position.x)*(point.x-a->position.x)+(point.y-a->position.y)*(point.y-a->position.y)+(point.z-a->position.z)*(point.z-a->position.z));
+	t3dfloat rb=sqrt((point.x-b->position.x)*(point.x-b->position.x)+(point.y-b->position.y)*(point.y-b->position.y)+(point.z-b->position.z)*(point.z-b->position.z));
+	vec3<t3dfloat> Pra(
+		a->rotate.x*a->I/ra,
+		a->rotate.y*a->I/ra,
+		a->rotate.z*a->I/ra
+	);
+	vec3<t3dfloat> Prb(
+		b->rotate.x*b->I/rb,
+		b->rotate.y*b->I/rb,
+		b->rotate.z*b->I/rb
+	);
+	vec3<t3dfloat> P(
+		Pra.x-Prb.x+Pv.x,
+		Pra.y-Prb.y+Pv.y,
+		Pra.z-Prb.z+Pv.z
+	);
+	t3dfloat dpv=P.x*normal.x+P.y*normal.y+P.z*normal.z;
+	vec3<t3dfloat> dP(
+		normal.x*dpv,
+		normal.y*dpv,
+		normal.z*dpv
+	);
 	//end
+	vec3<t3dfloat> dP2(
+		-dP.x,
+		-dP.y,
+		-dP.z
+	);
+	a->addimpulse(&point,&dP2);
+	b->addimpulse(&point,&dP );
+}
+t3dfloat p2i(t3dfloat * center,t3dfloat *point,t3dfloat *i){
+	t3dfloat r,d,out;
+	r=point[0]-center[0];
+	d=i[1]*r;
+	if(r>0)
+		out= d;
+	else
+		out=-d;
+	r=point[1]-center[1];
+	d=i[0]*r;
+	if(r>0)
+		out+=-d;
+	else
+		out+= d;
+	return out;
+}
+void object::addimpulse(vec3<t3dfloat> *p,vec3<t3dfloat> *i){
+	t3dfloat buf1,buf2;
+	//t3dfloat r;
+	t3dfloat bv1[1];
+	t3dfloat bv2[1];
+	t3dfloat bv3[1];
+	vec3<t3dfloat> buf3,buf4;
+	vec3<t3dfloat> normal(
+		p->x-position.x,
+		p->y-position.y,
+		p->z-position.z
+	);
+	buf1=normal.norm();
+	normal.x=normal.x/buf1;
+	normal.y=normal.y/buf1;
+	normal.z=normal.z/buf1;
+	buf1=i->x*normal.x+i->y*normal.y+i->z*normal.z;
+	vec3<t3dfloat> i1(
+		normal.x*buf1,
+		normal.y*buf1,
+		normal.z*buf1
+	);
+	vec3<t3dfloat> i2(
+		i->x-i1.x,
+		i->y-i1.y,
+		i->z-i1.z
+	);
+	moveAdd.x+=i1.x/m;
+	moveAdd.y+=i1.y/m;
+	moveAdd.z+=i1.z/m;
+	//buf3.x=i->x+p->x;
+	//buf3.y=i->y+p->y;
+	//buf3.z=i->z+p->z;
+	//buf3.x=buf3.x-position.x;
+	//buf3.y=buf3.y-position.y;
+	//buf3.z=buf3.z-position.z;
+	//buf3.init(
+	//	buf3.y * i->z - buf3.z * i->y,
+	//	buf3.z * i->x - buf3.x * i->z,
+	//	buf3.z * i->y - buf3.y * i->x
+	//);
+	//r=buf3.norm();
+	//r=r/i->norm();
+
+	//yx
+	bv1[0]=position.y;
+	bv1[1]=position.x;
+	bv2[0]=p->y;
+	bv2[1]=p->x;
+	bv3[0]=i->y;
+	bv3[1]=i->x;
+	rotateAdd.z+=p2i(bv1,bv2,bv3);
+	//zy
+	bv1[0]=position.z;
+	bv1[1]=position.y;
+	bv2[0]=p->z;
+	bv2[1]=p->y;
+	bv3[0]=i->z;
+	bv3[1]=i->y;
+	rotateAdd.x+=p2i(bv1,bv2,bv3);
+	//xz
+	bv1[0]=position.x;
+	bv1[1]=position.z;
+	bv2[0]=p->x;
+	bv2[1]=p->z;
+	bv3[0]=i->x;
+	bv3[1]=i->z;
+	rotateAdd.y+=p2i(bv1,bv2,bv3);
 }
 void getRtLine2d(t3dfloat * in,t3dfloat * out){
-	if(in[1]==0.0f){
-		if(in[0]==0.0f){
-			out[1]=0.0f;
-			out[0]=0.0f;
-			return;
-		}
-		if(in[0]<0.0f){
-			out[0]=0.0f;
-			out[1]=1.0f;
-			return;
-		}else{
-			out[0]=0.0f;
-			out[1]=-1.0f;
-			return;
-		}
-	}
-	if(in[0]==0.0f){
-		if(in[1]>0.0f){
-			out[0]=1.0f;
-			out[1]=0.0f;
-			return;
-		}else{
-			out[0]=-1.0f;
-			out[1]=0.0f;
-			return;
-		}
-	}
-	t3dfloat b=in[1]/in[0];
-	out[1]=sqrt(b*b+1.0f);
-	out[0]=-out[1]*b;
-	if(in[1]<0.0f)
+	t3dfloat n=sqrt(in[0]*in[0]+in[1]*in[1]);
+	out[0]= in[1];
+	out[1]=-in[0];
+	if(n==0)
 		return;
-	else{
-		out[1]=-out[1];
-		out[0]=-out[0];
-	}
+	out[0]=out[0]/n;
+	out[1]=out[1]/n;
+	//if(in[1]==0.0f){
+	//	if(in[0]==0.0f){
+	//		out[1]=0.0f;
+	//		out[0]=0.0f;
+	//		return;
+	//	}
+	//	if(in[0]<0.0f){
+	//		out[0]=0.0f;
+	//		out[1]=1.0f;
+	//		return;
+	//	}else{
+	//		out[0]=0.0f;
+	//		out[1]=-1.0f;
+	//		return;
+	//	}
+	//}
+	//if(in[0]==0.0f){
+	//	if(in[1]>0.0f){
+	//		out[0]=1.0f;
+	//		out[1]=0.0f;
+	//		return;
+	//	}else{
+	//		out[0]=-1.0f;
+	//		out[1]=0.0f;
+	//		return;
+	//	}
+	//}
+	//t3dfloat b=in[1]/in[0];
+	//out[1]=sqrt(b*b+1.0f);
+	//out[0]=-out[1]*b;
+	//if(in[1]<0.0f)
+	//	return;
+	//else{
+	//	out[1]=-out[1];
+	//	out[0]=-out[0];
+	//}
 }
 void getVelocity2d(t3dfloat * p,t3dfloat * c,t3dfloat w,t3dfloat * out){
 	t3dfloat line1[1];
@@ -1356,14 +1556,14 @@ void object::getVelocity(vec3<t3dfloat> *in,vec3<t3dfloat> *out){
 	out->x=0.0f;
 	out->y=0.0f;
 	out->z=0.0f;
-	//xy
-	buf [0]=in->x;
-	buf [1]=in->y;
-	bufp[0]=position.x;
-	bufp[1]=position.y;
+	//yx
+	buf [0]=in->y;
+	buf [1]=in->x;
+	bufp[0]=position.y;
+	bufp[1]=position.x;
 	getVelocity2d(buf,bufp,rotate.z,bufo);
-	out->x+=bufo[0];
-	out->y+=bufo[1];
+	out->y+=bufo[0];
+	out->x+=bufo[1];
 	//zy
 	buf [0]=in->z;
 	buf [1]=in->y;
@@ -1372,20 +1572,21 @@ void object::getVelocity(vec3<t3dfloat> *in,vec3<t3dfloat> *out){
 	getVelocity2d(buf,bufp,rotate.x,bufo);
 	out->z+=bufo[0];
 	out->y+=bufo[1];
-	//zx
-	buf [0]=in->z;
-	buf [1]=in->x;
-	bufp[0]=position.z;
-	bufp[1]=position.x;
+	//xz
+	buf [0]=in->x;
+	buf [1]=in->z;
+	bufp[0]=position.x;
+	bufp[1]=position.z;
 	getVelocity2d(buf,bufp,rotate.y,bufo);
-	out->z+=bufo[0];
-	out->x+=bufo[1];
+	out->x+=bufo[0];
+	out->z+=bufo[1];
+
 	out->x=out->x/2.0f;
 	out->y=out->x/2.0f;
 	out->z=out->x/2.0f;
 }
 //////////////////////////////////////
-//////碰撞求解器 end////////////////////
+//////collide  end////////////////////
 //////////////////////////////////////
 void rotatePoint(
 	vec3<t3dfloat> *point,
@@ -1436,14 +1637,19 @@ void space::nextstep(){
 		nfset 	*self=(nfset*)s;
 		object 	*o;
 		o=*(info->data);
+		if(o->sta){
+			o->rotateAdd.init(0.0f,0.0f,0.0f);
+			o->moveAdd.init(0.0f,0.0f,0.0f);
+			return;
+		}
 		o->move.x+=o->moveAdd.x;
 		o->move.y+=o->moveAdd.y;
 		o->move.z+=o->moveAdd.z;
 		o->rotate.x+=o->rotateAdd.x;
 		o->rotate.y+=o->rotateAdd.y;
 		o->rotate.z+=o->rotateAdd.z;
-		o->rotateAdd.init(0.0f , 0.0f , 0.0f);
-		o->moveAdd.init(0.0f , 0.0f , 0.0f);
+		o->rotateAdd.init(0.0f,0.0f,0.0f);
+		o->moveAdd.init(0.0f,0.0f,0.0f);
 		o->position.x+=(o->move.x)*(self->sp->timestep);
 		o->position.y+=(o->move.y)*(self->sp->timestep);
 		o->position.z+=(o->move.z)*(self->sp->timestep);
@@ -1508,6 +1714,8 @@ void collider::start(){
 void collider::step1(){
 	vec3<t3dfloat> bb,be,pp;
 	t3dfloat 	ll,rr;
+	if(o->hidden || o->sta)
+		return;
 	ll=parent->oct.length;
 	pp=&o->position;
 	rr=o->shape->mainSphere.r;
@@ -1579,6 +1787,7 @@ void collider::step4(object *a,object *b){
 	int i,l;
 	t3dfloat addx,addy,addz;
 	struct findintwothing{
+		collider * par;
 		void callback(octree::thing *t){
 			spa=((Bsphere *)(t->child))->parent;
 			if(!spb->isCollide(
@@ -1587,7 +1796,7 @@ void collider::step4(object *a,object *b){
 				spa->position.z,
 				spa->r
 			))return;
-			collider::collided(a,b,spa,spb);
+			par->collided(a,b,spa,spb);
 		}
 		object *a;
 		object *b;
@@ -1596,6 +1805,7 @@ void collider::step4(object *a,object *b){
 	}fitt;
 	fitt.a=a;
 	fitt.b=b;
+	fitt.par=this;
 	b->bufferupdate();
 	Bsphere *sp=b->sphBuffer;
 	l=b->shape->num;
@@ -1710,3 +1920,4 @@ void space::collide(object *o){
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 }
+#endif
