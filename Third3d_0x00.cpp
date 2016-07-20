@@ -262,6 +262,7 @@ class octree{
 			node 	bbl;
 			node 	bbr;
 			tree *	parent;
+			thing *	other;
 			char 	parposi;
 			void 	destruct	();
 			void 	init		();
@@ -300,13 +301,21 @@ class octree{
 		struct thing{
 			vec3<t3dfloat> 	position;
 			void *		child;
+			thing *		last;
+			thing *		next;
+			thing(){
+				last=null;
+				next=null;
+			}
 			struct octbuf{
 				tree *	Tree;
 				vec3<t3dfloat>	position;
 				t3dfloat	length;
+				int 		deep;
 				octbuf():position(){
 					Tree=null;
 					length=0.0f;
+					deep=0;
 				}
 			}octreebuffer;
 			void update();
@@ -320,6 +329,7 @@ class octree{
 			Pool->par=this;
 			root=Pool->construct();
 			Pool->num++;
+			maxdeep=64;
 		}
 		octree(int l){
 			Pool=new pool();
@@ -327,6 +337,7 @@ class octree{
 			Pool->par=this;
 			root=Pool->construct();
 			Pool->num++;
+			maxdeep=64;
 		}
 		octree(octree *o){
 			Pool	=o->Pool;
@@ -338,6 +349,7 @@ class octree{
 			pt	=o->pt;
 			pl	=o->pl;
 			Pool->num++;
+			maxdeep=64;
 		}
 		~octree(){
 			if(Pool==null)
@@ -353,6 +365,8 @@ class octree{
 		tree *		pt;		//point
 		vec3<t3dfloat> 	pp;		//point position
 		t3dfloat	pl;		//point length
+		int		pd;		//deep
+		int		maxdeep;
 		void 		p_init		();
 		void 		p_go		(char p);
 		void 		p_goparent	();
@@ -436,6 +450,7 @@ void 	octree::p_init(){
 	pp.init(0.0f,0.0f,0.0f);
 	pt=root;
 	pl=length;
+	pd=0;
 }
 void 	octree::p_goparent(){
 	t3dfloat 	le;
@@ -473,6 +488,7 @@ void 	octree::p_goparent(){
 		default:return;
 	}
 	pl=le;
+	pd--;
 	pt=pt->parent;
 }
 void 	octree::p_go(char p){
@@ -514,6 +530,7 @@ void 	octree::p_go(char p){
 		default:return;
 	}
 	pl=pl/2;
+	pd++;
 	pt=*ptt;
 }
 bool 	octree::p_isin(octree::thing *o){
@@ -570,6 +587,7 @@ void 	octree::tree::init(){
 	parent	=null;
 	parposi	=null;
 	Pool	=null;
+	other	=null;
 }
 octree::tree ** octree::tree::posi(char p){
 	octree::node * n;
@@ -610,11 +628,13 @@ bool 	octree::tree::trydest(){
 	return true;
 }
 void 	octree::push(octree::thing *d){
+	d->octreebuffer.deep=pd;
 	push(d,root,pp.x,pp.y,pp.z,pl);
 }
 void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dfloat z,t3dfloat l){
-	octree::thing *n2;
-	vec3<t3dfloat> p;
+	octree::thing 	*n2;
+	vec3<t3dfloat> 	p;
+	bool		maxmode;
 	if(!p_isin(o)){
 		return;
 		throw 0x01;
@@ -623,6 +643,15 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 		throw 0x05;
 		return;
 	}
+	if(o->octreebuffer.deep>maxdeep){
+		maxmode=true;
+		o->last=null;
+		o->next=t->other;
+		if(t->other)t->other->last=o;
+		t->other=o;
+		return;
+	}else
+		maxmode=false;
 	if((o->position.x)>(x+l)){
 		if((o->position.y)>(y+l)){
 			if((o->position.z)>(z+l)){
@@ -636,7 +665,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->tfr.child==null){
 					t->tfr.isTree=false;
 					t->tfr.child=o;
@@ -664,7 +693,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->bfr.child==null){
 					t->bfr.isTree=false;
 					t->bfr.child=o;
@@ -694,7 +723,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->tfl.child==null){
 					t->tfl.isTree=false;
 					t->tfl.child=o;
@@ -721,7 +750,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->bfl.child==null){
 					t->bfl.isTree=false;
 					t->bfl.child=o;
@@ -753,7 +782,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->tbr.child==null){
 					t->tbr.isTree=false;
 					t->tbr.child=o;
@@ -780,7 +809,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->bbr.child==null){
 					t->bbr.isTree=false;
 					t->bbr.child=o;
@@ -809,7 +838,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->tbl.child==null){
 					t->tbl.isTree=false;
 					t->tbl.child=o;
@@ -835,7 +864,7 @@ void 	octree::push(octree::thing *o,octree::tree *t,t3dfloat x,t3dfloat y,t3dflo
 						o->octreebuffer.position.z=p.z;
 						o->octreebuffer.length=l/2;
 						o->octreebuffer.Tree=t;
-
+						o->octreebuffer.deep++;
 				if(t->bbl.child==null){
 					t->bbl.isTree=false;
 					t->bbl.child=o;
@@ -869,6 +898,9 @@ void 	octree::thing::update(){
 	p->pp.z=	octreebuffer.position.z;
 	p->pl=	octreebuffer.length;
 	if(p->p_isin(this)) return;
+	if(p->pt->other==this)p->pt->other=next;
+	if(last){last->next=next; last=null;}
+	if(next){next->last=last; next=null;}
 	if(p->pt->parent!=null)
 		p->p_goparent();
 	else
@@ -916,6 +948,9 @@ void 	octree::thing::remove(){
 	if(octreebuffer.Tree->bfr.child==this){octreebuffer.Tree->bfr.child=null;}
 	if(octreebuffer.Tree->bbl.child==this){octreebuffer.Tree->bbl.child=null;}
 	if(octreebuffer.Tree->bbr.child==this){octreebuffer.Tree->bbr.child=null;}
+	if(octreebuffer.Tree->other==this){octreebuffer.Tree->other=next;}
+	if(last)last->next=next;
+	if(next)next->last=last;
 	octreebuffer.Tree->trydest();
 	octreebuffer.Tree=null;
 }
@@ -926,8 +961,16 @@ void octree::foreach(T *c){
 template<typename T>
 void octree::foreachchild(octree::tree *t,t3dfloat x,t3dfloat y,t3dfloat z,t3dfloat l,T * c){
 	vec3<t3dfloat> p;
+	thing *	tt;
 	if(t==null) return;
 	if(!c->foreachnode(t,x,y,z,l,c)) return;
+	if(t->other){
+		tt=t->other;
+		while(tt){
+			c->foreachthing(tt,x,y,z,l);
+			tt=tt->next;
+		}
+	}
 		// _TFL
 		if(t->tfl.child!=null){
 			p.init(x,y,z);
@@ -1820,6 +1863,7 @@ void collider::step4(object *a,object *b){
 		collider * par;
 		void callback(octree::thing *t){
 			spa=((Bsphere *)(t->child))->parent;
+			if(spb==spa)return;
 			if(!spb->isCollide(
 				spa->position.x,
 				spa->position.y,
