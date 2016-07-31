@@ -1173,13 +1173,13 @@ namespace physical{
 		public:
 			t3dfloat	 	length;
 			int 			time;
-			int			timestep;
+			t3dfloat		timestep;
 			bool(*onCollideWall)(object *o);
 			t3dcallback4		collided;
 			space():objects(),oct(),colBuffer(){
 				collided=null;
 				time=0;
-				timestep=1;
+				timestep=1.0f;
 				logpool=new clogpool;
 				logpool2=new clogpool;
 				logpool->par=this;
