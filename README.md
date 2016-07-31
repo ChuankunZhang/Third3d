@@ -1,2 +1,1 @@
-# Third3d
-A physical engine
+# Third3d是一个免费，开源的超轻量级物理引擎，整个引擎不到3000行
