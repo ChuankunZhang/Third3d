@@ -1,5 +1,21 @@
+
 #include<stdio.h>
 #include<math.h>
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//                                                                                                                //
+//  ____________ _        _                                                                                       //
+// |_____ ______| |      | |                 ==========        ||=======\\          __ ===                        //
+//      | |     | |      | |                           \\      ||        \\        /  \ =====                     //
+//      | |     | |      | |                            \\     ||        ||       /    \ ========                 //
+//      | |     | |______| |      ___   __              //     ||        ||      / __   \ ============            //
+//      | |     |  ______  | === |   | |  \  ===========       ||        ||     | |  |  | ================        //
+//      | |     | |      | |  |  |___| |  |             \\     ||        ||     | |__|  | ============            //
+//      | |     | |      | |  |  |\    |  |             //     ||        ||      \      /========                 //
+//      | |     | |      | |  |  | \   |  |            //      ||        //       \    /=====                     //
+//      |_|     |_|      |_| === |  \  |__/  ==========        ||=======//         \__/===                        //
+//                                                                                                  version:0x00  //
+//                                                                                                                //
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef _t3dDef
 	#define _t3dDef
 	#define null 0
@@ -7,6 +23,17 @@
 #endif
 #ifndef _t3d
 	#define _t3d
+#ifndef _t3dCollidePoolSize
+	#define _t3dCollidePoolSize 	65536
+#endif
+#ifndef _t3dOctreePoolSize
+	#define _t3dOctreePoolSize 	65536
+#endif
+typedef float t3dfloat;
+typedef void*(*t3dcallback1)(void*);
+typedef void*(*t3dcallback2)(void*,void*);
+typedef void*(*t3dcallback3)(void*,void*,void*);
+typedef void*(*t3dcallback4)(void*,void*,void*,void*);
 namespace Third3d{
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -28,10 +55,16 @@ namespace tmp{
 				else
 					return null;
 			}
+			T * 	readptr(int n){
+				if(n<=l)
+					return &data[n];
+				else
+					return null;
+			}
 			T 	operator[](int le){
 				return this->read(le);
 			}
-			void 	foreach(void(*callback)(T * d,void *a),void *a){
+			void 	foreach(void(*callback)(T*,void*),void *a){
 				int i;
 				for(i=0;i<=l;i++){
 					callback(&data[i],a);
@@ -240,7 +273,6 @@ template<typename T> class vec3{
 			);
 		}
 };
-typedef float t3dfloat;
 class octree{
 	public:
 		struct thing;
@@ -273,30 +305,34 @@ class octree{
 		struct pool{
 			octree *par;
 			pool *	next;
-			tree *	data;
-			int  *	used;
-			int 	length;
+			tree 	data[_t3dOctreePoolSize];
+			int  	used[_t3dOctreePoolSize];
+			//int 	length;
 			int 	time;
 			int 	num;
 			pool(){
-				data	=null;
-				length	=0;
+				//data	=null;
+				//length=0;
 				time	=0;
-				used	=null;
+				//used	=null;
 				next	=null;
 				num	=0;
+				usednum=0;
 			}
 			~pool(){
-				if(data) 	delete[] 	data;
-				if(used) 	delete[] 	used;
+				//if(data) 	delete[] 	data;
+				//if(used) 	delete[] 	used;
 				if(next) 	delete 		next;
 			}
 			void 	poolinit();
-			void 	poolinit(int l);
+			//void 	poolinit(int l);
 			void 	nextinit();
-			tree * construct();
-			void   destruct	(tree * d);
+			tree *	construct();
+			void	destruct	(tree * d);
 			void	clear();
+			private:
+			int	li;
+			int	usednum;
 		};
 		struct thing{
 			vec3<t3dfloat> 	position;
@@ -331,14 +367,6 @@ class octree{
 			Pool->num++;
 			maxdeep=64;
 		}
-		octree(int l){
-			Pool=new pool();
-			Pool->poolinit(l);
-			Pool->par=this;
-			root=Pool->construct();
-			Pool->num++;
-			maxdeep=64;
-		}
 		octree(octree *o){
 			Pool	=o->Pool;
 			root	=o->root;
@@ -349,7 +377,7 @@ class octree{
 			pt	=o->pt;
 			pl	=o->pl;
 			Pool->num++;
-			maxdeep=64;
+			maxdeep	=o->maxdeep;
 		}
 		~octree(){
 			if(Pool==null)
@@ -389,50 +417,64 @@ void 	octree::operator=(octree *o){
 	this->~octree();
 	*this=octree(o);
 }
-void 	octree::pool::poolinit(int l){
+void 	octree::pool::poolinit(){
 	int i;
 	if(data!=null) return;
-	length=l;
-	data=new octree::tree	[l];
-	used=new int		[l];
-	for(i=0;i<=l;i++){
+	//length=l;
+	//data=new octree::tree	[l];
+	//used=new int		[l];
+	for(i=0;i<=_t3dOctreePoolSize;i++){
 		used[i]=-1;
 	}
-}
-void 	octree::pool::poolinit(){
-	poolinit(65536);
 }
 void 	octree::pool::nextinit(){
 	if(next) return;
 	next=new octree::pool;
-	next->poolinit(length);
+	next->poolinit();
 	next->par=par;
 }
 octree::tree *	octree::pool::construct(){
 	octree::tree * 	d;
 	int 		i;
 	if(data==null) poolinit();
-	for(i=0;i<=length;i++){
+	if(usednum>_t3dOctreePoolSize) goto goNextPage;
+	for(i=li;i<=_t3dOctreePoolSize;i++){
 		if(used[i]==time) continue;
 		used[i]=time;
 		data[i].init();
+		li=i;
+		usednum++;
 		return &data[i];
 	}
+	if(li!=0)
+	for(i=0;i<=li;i++){
+		if(used[i]==time) continue;
+		used[i]=time;
+		data[i].init();
+		li=i;
+		usednum++;
+		return &data[i];
+	}
+	goNextPage:
+	li=0;
 	nextinit();
 	return next->construct();
 }
 void	octree::pool::destruct(octree::tree *d){
 	int i;
 	i=d-data;
-	if(i>length || i<0){
+	if(i>_t3dOctreePoolSize || i<0){
 		if(next)
 			next->destruct(d);
 		return;
-	};
+	}
 	used[i]--;
+	usednum--;
 }
 void 	octree::pool::clear(){
 	time++;
+	usednum=0;
+	li=0;
 	if(next) next->clear();
 }
 void 	octree::clear(){
@@ -545,7 +587,6 @@ bool 	octree::p_isin(octree::thing *o){
 		return true;
 	else
 		return false;
-	
 }
 void 	octree::node::init(){
 	child=null;
@@ -604,7 +645,6 @@ octree::tree ** octree::tree::posi(char p){
 	}
 	if(n->isTree) return (  (octree::tree **) &n->child  );
 	return null;
-		
 }
 bool 	octree::tree::isEmpty(){
 	if(tfl.child==null)
@@ -1095,13 +1135,14 @@ void octree::search(t3dfloat x,t3dfloat y,t3dfloat z,t3dfloat l,T *c){
 #ifndef _t3dSpace
 #define _t3dSpace
 #define floatmod(x,y) x-((int)(x/y))*y
-namespace space{
+namespace physical{
 	void  rotatePoint(vec3<t3dfloat> *,vec3<t3dfloat> *,vec3<t3dfloat> *);
 	class object;
 	class sphere;
 	class Shape;
 	class collider;
 	class space;
+	class world;
 	class clog{
 		public:
 			void *	text;
@@ -1111,7 +1152,7 @@ namespace space{
 		friend class space;
 		public:
 		protected:
-			clog 		c[65536];
+			clog 		c[_t3dCollidePoolSize];
 			space *		par;
 			clogpool *	next;
 			int		p;
@@ -1128,20 +1169,22 @@ namespace space{
 	};
 	class space{
 		friend class collider;
+		friend class world;
 		public:
 			t3dfloat	 	length;
 			int 			time;
 			int			timestep;
 			bool(*onCollideWall)(object *o);
-			void(*onCollide)(object *a,object *b);
-			space(t3dfloat l):objects(),oct(),colBuffer(){
-				onCollide=null;
+			t3dcallback4		collided;
+			space():objects(),oct(),colBuffer(){
+				collided=null;
 				time=0;
 				timestep=1;
 				logpool=new clogpool;
 				logpool2=new clogpool;
 				logpool->par=this;
 				logpool2->par=this;
+				maxR=0.0f;
 			}
 			~space(){
 				delete logpool;
@@ -1151,6 +1194,7 @@ namespace space{
 			void remove(object *o);
 			void update(object *o);
 			void nextstep();
+			void maxRinit();
 			bool collideLog(sphere * s,void * t);
 		protected:
 			octree 			oct;
@@ -1189,12 +1233,17 @@ namespace space{
 				collideLog=null;
 				collideLogLast=null;
 			}
+			void operator=(sphere ss){
+				r=ss.r;
+				position=&ss.position;
+			}
 			int	time;
 			clog * 	collideLog;
 			clog * 	collideLogLast;
 	};
 	class Shape{
 		friend class collider;
+		friend class space;
 		public:
 			sphere *		spheres;
 			sphere 			mainSphere;
@@ -1203,8 +1252,41 @@ namespace space{
 			Shape():mainSphere(){
 				spheres=null;
 			}
+			~Shape(){
+				if(spheres) delete[] spheres;
+			}
 			void setShape();
-			void setCenterCallback(sphere * s);
+			void maxRinit();
+			class creation{
+				public:
+					creation():sph(){
+					}
+					void addsphere(t3dfloat r,vec3<t3dfloat> * p){
+						sphere spw;
+						spw.position=p;
+						spw.r=r;
+						sph.push(spw);
+					}
+					void output(Shape * sh){
+						struct cb{
+							Shape * sh;
+							int 	i;
+						}c;
+						c.i=0;
+						c.sh=sh;
+						sh->num=sph.length();
+						sh->spheres=new sphere[sh->num];
+						sph.foreach([](sphere * sp,void *a){
+							cb *c=(cb*)a;
+							c->sh->spheres[c->i]=*sp;
+							c->i++;
+						},&c);
+						sh->maxRinit();
+					}
+				private:
+					tmp::array<sphere> 	sph;
+					t3dfloat		maxR;
+			};
 		protected:
 			t3dfloat 		maxR;
 	};
@@ -1230,16 +1312,18 @@ namespace space{
 			vec3<t3dfloat> 			position;
 			vec3<t3dfloat> 			rotation;
 			Shape	*			shape;
+			bool				(*onCollide)(object*,object*,sphere*,sphere*);
 			vec3<t3dfloat>			move;		//speed of moving
 			vec3<t3dfloat>			rotate;		//speed of rotation
 			octree::thing 			parent;
 			object(Shape *s):position(),rotation(),shape(),parent(){
-				sta	=false;
-				stalock	=false;
-				hidden 	=false;
-				time 	=0;
-				parent.child=this;
-				shape	=s;
+				sta		=false;
+				stalock		=false;
+				hidden 		=false;
+				time 		=0;
+				parent.child	=this;
+				onCollide	=null;
+				shape		=s;
 			}
 			void isCollide(object * a,void (*callback)(object * b));
 			void setPosition(t3dfloat x,t3dfloat y,t3dfloat z);
@@ -1294,7 +1378,26 @@ namespace space{
 //////Functions Begin/////////////////
 //////////////////////////////////////
 //////////////////////////////////////
-
+void Shape::setCenter(t3dfloat x,t3dfloat y,t3dfloat z){
+	int i;
+	for(i=0;i<num;i++){
+		spheres[i].position.x-=x;
+		spheres[i].position.y-=y;
+		spheres[i].position.z-=z;
+	}
+	maxRinit();
+}
+void Shape::maxRinit(){
+	int 		i;
+	t3dfloat 	l;
+	maxR=0.0f;
+	for(i=0;i<num;i++){
+		l=spheres[i].position.norm()+spheres[i].r;
+		if(l>maxR)
+			maxR=l;
+	}
+	mainSphere.r=maxR;
+}
 //////////////////////////////////////
 //////collide  begin//////////////////
 //////////////////////////////////////
@@ -1302,7 +1405,7 @@ clog *	clogpool::construct(){
 	if(time!=par->time){
 		p=0;
 	}
-	if(p>65536){
+	if(p>_t3dCollidePoolSize){
 		if(next==null){
 			next=new clogpool;
 			next->time=time;
@@ -1355,6 +1458,19 @@ void collider::collided(
 ){
 	if(parent->collideLog(oa,ob))return;
 	if(parent->collideLog(ob,oa))return;
+	if(a->stalock)a->sta=true; else a->sta=false;
+	if(b->stalock)b->sta=true; else b->sta=false;
+	if(a->onCollide) a->onCollide(a,b,oa,ob);
+	if(b->onCollide) b->onCollide(a,b,oa,ob);
+	if(parent->collided){
+		t3dcallback4 cb;
+		cb=(t3dcallback4)parent->collided(a,b,oa,ob);
+		if(cb){
+			((t3dcallback4)cb)(a,b,oa,ob);
+			return;
+		}
+	}
+	if(a->stalock || b->stalock || a->hidden || b->hidden)return;
 	vec3<t3dfloat> 	buf1,buf2;
 	t3dfloat 	buf3,buf4,buf5,buf6;
 	//get true position of sphere
@@ -1664,25 +1780,32 @@ void rotatePoint(
 ){
 	vec3<t3dfloat> 	buf(0.0f , 0.0f , 0.0f);
 	vec3<t3dfloat> 	r(point->x - center->x , point->y - center->y , point->z - center->z);
-
-	buf.x	=r.x*cos(Rotate->z)-r.y*sin(Rotate->z);
-	buf.y	=r.x*sin(Rotate->z)+r.y*cos(Rotate->z);
+	t3dfloat cosx=cos(-(Rotate->x));
+	t3dfloat cosy=cos(-(Rotate->y));
+	t3dfloat cosz=cos(-(Rotate->z));
+	t3dfloat sinx=sqrt(1-cosx*cosx);
+	t3dfloat siny=sqrt(1-cosy*cosy);
+	t3dfloat sinz=sqrt(1-cosz*cosz);
+	buf.x	=r.x*cosz-r.y*sinz;
+	buf.y	=r.x*sinz+r.y*cosz;
 	r.x	=buf.x;
 	r.y	=buf.y;
-	buf.z	=r.z*cos(Rotate->y)-r.x*sin(Rotate->y);
-	buf.x	=r.z*sin(Rotate->y)+r.x*cos(Rotate->y);
+	buf.z	=r.z*cosy-r.x*siny;
+	buf.x	=r.z*siny+r.x*cosy;
 	r.z	=buf.z;
 	r.x	=buf.x;
-	buf.y	=r.y*cos(Rotate->x)-r.z*sin(Rotate->x);
-	buf.z	=r.y*sin(Rotate->x)+r.z*cos(Rotate->x);
-	point->x	=buf.x;
-	point->y	=buf.y;
-	point->z	=buf.z;
+	buf.y	=r.y*cosx-r.z*sinx;
+	buf.z	=r.y*sinx+r.z*cosx;
+	point->x=buf.x;
+	point->y=buf.y;
+	point->z=buf.z;
 }
 void space::add(object *o){
 	objects.insert(o);
 	oct.push(&o->parent);
 	o->bufferinit();
+	if(o->shape->maxR>maxR)
+		maxR=o->shape->maxR;
 	this->collide(o);
 }
 void space::remove(object *o){
@@ -1694,6 +1817,14 @@ void space::update(object *o){
 	o->parent.position.y=o->position.y;
 	o->parent.position.z=o->position.z;
 	o->parent.update();
+}
+void space::maxRinit(){
+	maxR=0.0f;
+	objects.foreach([](tmp::table<object*>::info *info,void *s){
+		space * self=(space*)s;
+		t3dfloat R=(*(info->data))->shape->maxR;
+		if(R>self->maxR) self->maxR=R;
+	},this);
 }
 struct nfset{
 	space 	*	sp;
@@ -1710,7 +1841,7 @@ void space::nextstep(){
 		nfset 	*self=(nfset*)s;
 		object 	*o;
 		o=*(info->data);
-		if(o->sta){
+		if(o->sta || o->stalock){
 			o->rotateAdd.init(0.0f,0.0f,0.0f);
 			o->moveAdd.init(0.0f,0.0f,0.0f);
 			return;
@@ -1787,7 +1918,7 @@ void collider::start(){
 void collider::step1(){
 	vec3<t3dfloat> bb,be,pp;
 	t3dfloat 	ll,rr;
-	if(o->hidden || o->sta)
+	if((o->hidden && !o->onCollide) || o->sta)
 		return;
 	ll=parent->oct.length;
 	pp=&o->position;
@@ -1988,10 +2119,31 @@ void space::collide(object *o){
 //////Functions End///////////////////
 //////////////////////////////////////
 //////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+class world{
+	public:
+		space			Space;
+		tmp::table<object*> *	objects;
+		void setOctreeDeep(int n){
+			Space.oct.maxdeep=n;
+		}
+		world(t3dfloat l):Space(){
+			length=l;
+			Space.length=l;
+			Space.oct.length=l;
+			objects=&(Space.objects);
+		}
+	private:
+		t3dfloat 	length;
+};
+///////////////////////////////////////
+///////////////////////////////////////
+///////////////////////////////////////
 }
 #endif
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
 }
 #endif
